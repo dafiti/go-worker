@@ -11,7 +11,8 @@ type (
 	}
 
 	Message struct {
-		Body *string
+		Body     *string
+		Metadata map[string]interface{}
 	}
 
 	MessagesReceiver interface {
@@ -29,8 +30,13 @@ func (w *Worker) process(wg *sync.WaitGroup, r MessagesReceiver, h MessagesHandl
 
 	messages := r.Receive()
 	err := h.Handle(&messages)
-	if err == nil {
-		r.AckMessages(messages)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	err = r.AckMessages(messages)
+	if err != nil {
+		panic(err.Error())
 	}
 }
 

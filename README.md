@@ -30,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
+	"github.com/dafiti/go-worker"
 )
 
 type (
@@ -44,7 +45,7 @@ type (
 	LogHandler struct{}
 )
 
-func (r *SqsMessagesReceiver) Receive() []Message {
+func (r *SqsMessagesReceiver) Receive() []worker.Message {
 	params := &sqs.ReceiveMessageInput{
 		QueueUrl:            &r.QueueUrl,
 		MaxNumberOfMessages: aws.Int64(r.MaxNumberOfMessages),
@@ -56,12 +57,50 @@ func (r *SqsMessagesReceiver) Receive() []Message {
 		log.Fatalln(err.Error())
 	}
 
-	var messages []Message
+	var messages []worker.Message
 	for _, m := range result.Messages {
-		messages = append(messages, Message{Body: m.Body})
+        meta := make(map[string]interface{})
+		meta["ReceiptHandle"] = *m.ReceiptHandle
+
+		messages = append(messages, worker.Message{
+			Body:     m.Body,
+			Metadata: meta,
+		})
 	}
 
 	return messages
+}
+
+func (r *SqsMessagesReceiver) AckMessages(messages []worker.Message) error {
+	var entries []*sqs.DeleteMessageBatchRequestEntry
+	count := 0
+
+	for _, m := range messages {
+		count++
+		id := "message_" + strconv.Itoa(count)
+		receiptHandle := m.Metadata["ReceiptHandle"].(string)
+
+		entries = append(entries, &sqs.DeleteMessageBatchRequestEntry{
+			Id:            &id,
+			ReceiptHandle: &receiptHandle,
+		})
+
+		if count == SQS_MAX_MESSAGES || count == len(messages) {
+			input := &sqs.DeleteMessageBatchInput{
+				Entries:  entries,
+				QueueUrl: &r.QueueUrl,
+			}
+			_, err := r.SqsClient.DeleteMessageBatch(input)
+			if err != nil {
+				return err
+			}
+
+			count = 0
+			entries = nil
+		}
+	}
+
+	return nil
 }
 
 func (h *LogHandler) Handle(messages *[]Message) (bool, error) {
