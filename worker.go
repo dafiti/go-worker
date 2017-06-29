@@ -16,10 +16,11 @@ type (
 
 	MessagesReceiver interface {
 		Receive() []Message
+		AckMessages(messages []Message) error
 	}
 
 	MessagesHandler interface {
-		Handle(messages *[]Message) (bool, error)
+		Handle(messages *[]Message) error
 	}
 )
 
@@ -27,7 +28,10 @@ func (w *Worker) process(wg *sync.WaitGroup, r MessagesReceiver, h MessagesHandl
 	defer wg.Done()
 
 	messages := r.Receive()
-	h.Handle(&messages)
+	err := h.Handle(&messages)
+	if err == nil {
+		r.AckMessages(messages)
+	}
 }
 
 func (w *Worker) Run(receiver MessagesReceiver, handler MessagesHandler) {

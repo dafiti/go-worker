@@ -13,8 +13,10 @@ const (
 )
 
 type (
-	FakeReceiver struct{}
-	FakeHandler  struct {
+	FakeReceiver struct {
+		MessagesAcked int
+	}
+	FakeHandler struct {
 		MessagesHandled int
 		TimesCalled     int
 	}
@@ -30,10 +32,16 @@ func (r *FakeReceiver) Receive() []Message {
 	return m
 }
 
-func (h *FakeHandler) Handle(m *[]Message) (bool, error) {
+func (r *FakeReceiver) AckMessages(messages []Message) error {
+	r.MessagesAcked = len(messages)
+
+	return nil
+}
+
+func (h *FakeHandler) Handle(m *[]Message) error {
 	h.TimesCalled = h.TimesCalled + 1
 	h.MessagesHandled = h.MessagesHandled + len(*m)
-	return true, nil
+	return nil
 }
 
 func TestShouldProcessMessages(t *testing.T) {
@@ -45,4 +53,5 @@ func TestShouldProcessMessages(t *testing.T) {
 
 	assert.Equal(t, MESSAGE_COUNT*WORKERS_COUNT, h.MessagesHandled, "Number of messages handled")
 	assert.Equal(t, WORKERS_COUNT, h.TimesCalled, "Number of workers called")
+	assert.Equal(t, MESSAGE_COUNT, r.MessagesAcked, "Number of messages acked")
 }
